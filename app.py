@@ -49,18 +49,73 @@ if "number_of_monitoring_stations" in df.columns:
 if "date" in df.columns:
     df["date"] = pd.to_datetime(df["date"], errors="coerce", dayfirst=True)
 
-pages = [
-    "Dashboard",
-    "Practical 2: Cleaning & EDA",
-    "Practical 3: Probability & Sampling",
-    "Practical 4: Central Limit Theorem",
-    "Lab 5: Confidence Intervals & Z/t Tests",
-    "Lab 6A: Chi-Square Test",
-    "Lab 6B/C: Covariance & Correlation",
-    "Practical 6: Two-Way ANOVA",
-    "Lab 7: Regression"
-]
-page = st.sidebar.radio("Navigate practicals", pages)
+page_options = {
+    "Dashboard": "Dashboard",
+    "Data Cleaning & Exploratory Data Analysis": "Practical 2: Cleaning & EDA",
+    "Probability Distributions & Sampling": "Practical 3: Probability & Sampling",
+    "Central Limit Theorem": "Practical 4: Central Limit Theorem",
+    "Confidence Intervals & Hypothesis Testing (Z-test and t-test)": "Lab 5: Confidence Intervals & Z/t Tests",
+    "Chi-Square Test": "Lab 6A: Chi-Square Test",
+    "Covariance & Correlation Analysis": "Lab 6B/C: Covariance & Correlation",
+    "Two-Way ANOVA": "Practical 6: Two-Way ANOVA",
+    "Regression Analysis": "Lab 7: Regression"
+}
+selected_topic = st.sidebar.radio("Navigate topics", list(page_options.keys()))
+page = page_options[selected_topic]
+
+
+topic_info = {
+    "Dashboard": (
+        "Purpose",
+        "Gives a quick overview of the AQI dataset, including record count, average and maximum AQI, missing values, and duplicate rows.",
+        "The summary values are calculated directly from the loaded dataset. Average AQI = sum of valid AQI values divided by the number of valid values."
+    ),
+    "Data Cleaning & Exploratory Data Analysis": (
+        "Purpose",
+        "Finds missing values and duplicates, summarizes numerical data, and uses charts to understand distributions, trends, outliers, and category frequencies.",
+        "Mean = sum(x)/n; median = middle sorted value; mode = most frequent value; variance measures spread around the mean; standard deviation = square root of variance; quartiles divide sorted data into four parts."
+    ),
+    "Probability Distributions & Sampling": (
+        "Purpose",
+        "Studies how AQI values are distributed and how samples can represent the larger dataset.",
+        "Simple random sampling selects records randomly; systematic sampling selects records at a regular interval; stratified sampling selects records from each category. A sampling distribution is formed by repeatedly calculating sample statistics."
+    ),
+    "Central Limit Theorem": (
+        "Purpose",
+        "Shows how the distribution of sample means behaves when many samples of the same size are drawn from a population.",
+        "Draw repeated samples, calculate each sample mean, and plot those means. The standard error is approximately s/√n; larger samples generally produce less variation in the sample means."
+    ),
+    "Confidence Intervals & Hypothesis Testing (Z-test and t-test)": (
+        "Purpose",
+        "Estimates a plausible range for the population mean AQI and tests a claim about that mean.",
+        "A confidence interval is estimate ± critical value × standard error. A one-sample t-test uses t = (sample mean − hypothesized mean)/(sample standard deviation/√n). A Z-test uses a known population standard deviation. Compare the p-value with α to make a decision."
+    ),
+    "Chi-Square Test": (
+        "Purpose",
+        "Checks whether two categorical variables, such as state and air-quality status, appear to be associated.",
+        "Build a contingency table of observed counts. The chi-square statistic is Σ((observed − expected)²/expected). A small p-value (below α) provides evidence of an association; check expected cell counts before interpreting the result."
+    ),
+    "Covariance & Correlation Analysis": (
+        "Purpose",
+        "Measures the direction and strength of the relationship between two numerical variables.",
+        "Covariance indicates whether variables tend to move together. Pearson correlation measures linear association from −1 to +1; Spearman correlation measures monotonic association using ranks. Their p-values test whether the observed association is statistically significant."
+    ),
+    "Two-Way ANOVA": (
+        "Purpose",
+        "Compares mean AQI across groups defined by two categorical factors and tests their individual and interaction effects.",
+        "The ANOVA model separates variation associated with Factor A, Factor B, their interaction, and residual error. It uses F-statistics and p-values to assess effects. Results rely on suitable independence, residual, and variance assumptions."
+    ),
+    "Regression Analysis": (
+        "Purpose",
+        "Fits a model to predict AQI from selected numerical predictor variables and evaluates prediction quality.",
+        "Linear regression estimates an intercept and coefficients that minimize squared prediction errors. R² describes explained variation; MAE is average absolute error; RMSE penalizes larger errors more strongly. Test-set metrics estimate performance on unseen records."
+    )
+}
+
+info_title, info_purpose, info_method = topic_info[selected_topic]
+with st.expander("About this topic: purpose and calculation", expanded=False):
+    st.markdown(f"**What it is used for**  \n{info_purpose}")
+    st.markdown(f"**How it is calculated (short)**  \n{info_method}")
 st.sidebar.markdown("---")
 st.sidebar.caption("Built with Streamlit, Pandas, NumPy, SciPy, Statsmodels and Scikit-learn")
 
