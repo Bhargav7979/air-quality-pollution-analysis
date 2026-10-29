@@ -16,7 +16,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 st.set_page_config(page_title="Air Quality & Pollution Trend Analysis", page_icon="🌫️", layout="wide")
 st.title("🌫️ Air Quality & Pollution Trend Analysis")
-st.caption("Big Data Analytics Lab Project | Practicals 1–7")
+st.caption("Statistical Inference Lab | Labs 1–7")
 
 @st.cache_data
 def load_data(file):
