@@ -8,6 +8,10 @@ import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import make_pipeline
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 st.set_page_config(page_title="Air Quality & Pollution Trend Analysis", page_icon="🌫️", layout="wide")
@@ -58,7 +62,8 @@ page_options = {
     "Chi-Square Test": "Lab 6A: Chi-Square Test",
     "Covariance & Correlation Analysis": "Lab 6B/C: Covariance & Correlation",
     "Two-Way ANOVA": "Practical 6: Two-Way ANOVA",
-    "Regression Analysis": "Lab 7: Regression"
+    "Regression Analysis": "Lab 7: Regression",
+    "Regression Model Comparison": "Regression Model Comparison"
 }
 selected_topic = st.sidebar.radio("Navigate topics", list(page_options.keys()))
 page = page_options[selected_topic]
@@ -109,6 +114,11 @@ topic_info = {
         "Purpose",
         "Fits a model to predict AQI from selected numerical predictor variables and evaluates prediction quality.",
         "Linear regression estimates an intercept and coefficients that minimize squared prediction errors. R² describes explained variation; MAE is average absolute error; RMSE penalizes larger errors more strongly. Test-set metrics estimate performance on unseen records."
+    ),
+    "Regression Model Comparison": (
+        "Purpose",
+        "Compares different regression algorithms on the same AQI dataset and test records to see which predicts AQI more accurately.",
+        "Simple linear regression uses one predictor; multiple linear regression uses several predictors; polynomial regression adds squared and interaction terms; random forest averages predictions from many decision trees. Compare R² (higher is generally better) and MAE/RMSE (lower is better) on the same held-out test set."
     )
 }
 
@@ -471,3 +481,110 @@ elif page == "Lab 7: Regression":
     st.dataframe(results.head(100), use_container_width=True)
     st.download_button("Download test predictions", results.to_csv(index=False).encode("utf-8"), "aqi_regression_predictions.csv", "text/csv")
     st.caption("Choose scientifically meaningful predictors. A low R² can be a valid finding if available variables explain little of the AQI variation.")
+
+
+elif page == "Regression Model Comparison":
+    st.subheader("Regression Model Comparison")
+    st.write("Compare simple linear, multiple linear, polynomial, and random forest regression using the same train/test split.")
+    st.info("This comparison uses numerical predictors available in the dataset. AQI is the target. Model scores are calculated live from your loaded data; they are not preset values.")
+
+    numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+    predictors = [c for c in numeric_cols if c != "aqi_value"]
+    if not predictors:
+        st.error("No numerical predictor columns are available besides AQI.")
+        st.stop()
+
+    simple_predictor = st.selectbox("Predictor for Simple Linear Regression", predictors, index=0)
+    multi_predictors = st.multiselect(
+        "Predictors for Multiple Linear / Polynomial / Random Forest models",
+        predictors,
+        default=predictors
+    )
+    if not multi_predictors:
+        st.warning("Select at least one predictor for the multi-feature models.")
+        st.stop()
+
+    test_fraction = st.slider("Test set proportion", 0.1, 0.4, 0.2, step=0.05, key="compare_test_fraction")
+    random_state = st.number_input("Random seed", min_value=0, max_value=99999, value=42, key="compare_seed")
+
+    # Use the same target rows and split for fair model comparison.
+    needed = list(dict.fromkeys(["aqi_value", simple_predictor] + multi_predictors))
+    compare_df = df[needed].apply(pd.to_numeric, errors="coerce").dropna(subset=["aqi_value"]).copy()
+    compare_df = compare_df.replace([np.inf, -np.inf], np.nan)
+    compare_df = compare_df.dropna(subset=[simple_predictor] + multi_predictors)
+
+    if len(compare_df) < 20:
+        st.warning(f"Only {len(compare_df)} complete rows are available. At least 20 are recommended for a meaningful comparison.")
+        st.stop()
+    if compare_df["aqi_value"].nunique() < 2:
+        st.warning("AQI must contain more than one distinct value.")
+        st.stop()
+
+    y = compare_df["aqi_value"]
+    X_simple = compare_df[[simple_predictor]]
+    X_multi = compare_df[multi_predictors]
+    indices = np.arange(len(compare_df))
+    train_idx, test_idx = train_test_split(indices, test_size=test_fraction, random_state=int(random_state))
+    y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+
+    model_specs = [
+        ("Simple Linear Regression", make_pipeline(SimpleImputer(strategy="median"), LinearRegression()), X_simple),
+        ("Multiple Linear Regression", make_pipeline(SimpleImputer(strategy="median"), LinearRegression()), X_multi),
+        ("Polynomial Regression (degree 2)", make_pipeline(SimpleImputer(strategy="median"), PolynomialFeatures(degree=2, include_bias=False), LinearRegression()), X_multi),
+        ("Random Forest Regression", make_pipeline(SimpleImputer(strategy="median"), RandomForestRegressor(n_estimators=150, random_state=int(random_state), min_samples_leaf=2, n_jobs=-1)), X_multi)
+    ]
+
+    rows = []
+    fitted = {}
+    predictions_by_model = {}
+    for name, estimator, features in model_specs:
+        X_train = features.iloc[train_idx]
+        X_test = features.iloc[test_idx]
+        estimator.fit(X_train, y_train)
+        pred = estimator.predict(X_test)
+        fitted[name] = estimator
+        predictions_by_model[name] = pred
+        rows.append({
+            "Model": name,
+            "R² (higher is better)": r2_score(y_test, pred),
+            "MAE (lower is better)": mean_absolute_error(y_test, pred),
+            "RMSE (lower is better)": np.sqrt(mean_squared_error(y_test, pred))
+        })
+
+    scores = pd.DataFrame(rows).sort_values("RMSE (lower is better)").reset_index(drop=True)
+    st.markdown("### Performance comparison")
+    st.dataframe(scores.style.format({
+        "R² (higher is better)": "{:.4f}",
+        "MAE (lower is better)": "{:.4f}",
+        "RMSE (lower is better)": "{:.4f}"
+    }), use_container_width=True)
+    best = scores.iloc[0]
+    st.success(f"Lowest test RMSE in this run: {best['Model']} (RMSE = {best['RMSE (lower is better)']:.4f}). This does not guarantee the model will perform best on future data.")
+
+    metric = st.selectbox("Metric to visualize", ["R² (higher is better)", "MAE (lower is better)", "RMSE (lower is better)"], key="compare_metric")
+    chart_scores = scores.sort_values(metric, ascending=(metric != "R² (higher is better)"))
+    fig, ax = plt.subplots(figsize=(9, 4))
+    ax.bar(chart_scores["Model"], chart_scores[metric])
+    ax.set_title(f"Model comparison: {metric}")
+    ax.set_ylabel(metric)
+    ax.tick_params(axis="x", rotation=20)
+    fig.tight_layout()
+    st.pyplot(fig)
+
+    chosen_model = st.selectbox("Show actual vs predicted for", list(predictions_by_model.keys()), key="compare_pred_model")
+    chosen_pred = predictions_by_model[chosen_model]
+    fig, ax = plt.subplots(figsize=(6, 5))
+    ax.scatter(y_test, chosen_pred, alpha=0.35)
+    lower = min(float(y_test.min()), float(np.min(chosen_pred)))
+    upper = max(float(y_test.max()), float(np.max(chosen_pred)))
+    ax.plot([lower, upper], [lower, upper], linestyle="--")
+    ax.set(title=f"Actual vs Predicted AQI — {chosen_model}", xlabel="Actual AQI", ylabel="Predicted AQI")
+    fig.tight_layout()
+    st.pyplot(fig)
+
+    pred_export = pd.DataFrame({"Actual AQI": y_test.to_numpy()})
+    for name, pred in predictions_by_model.items():
+        pred_export[f"Predicted — {name}"] = pred
+    st.download_button("Download model comparison results", scores.to_csv(index=False).encode("utf-8"), "aqi_model_comparison.csv", "text/csv")
+    st.download_button("Download test predictions", pred_export.to_csv(index=False).encode("utf-8"), "aqi_model_predictions.csv", "text/csv")
+    st.caption("All models use the same held-out test records for fair comparison. A high R² or low error should be interpreted alongside data quality, leakage risks, and whether the predictors are available at prediction time.")
