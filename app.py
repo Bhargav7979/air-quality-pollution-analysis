@@ -488,11 +488,25 @@ elif page == "Regression Model Comparison":
     st.write("Compare simple linear, multiple linear, polynomial, and random forest regression using the same train/test split.")
     st.info("This comparison uses numerical predictors available in the dataset. AQI is the target. Model scores are calculated live from your loaded data; they are not preset values.")
 
+    # Keep only numeric predictors with enough valid, varying observations.
+    # Empty columns such as `note` may be inferred as numeric by pandas but
+    # cannot be used for modelling and would otherwise reduce complete rows to zero.
     numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-    predictors = [c for c in numeric_cols if c != "aqi_value"]
+    predictors = []
+    for col in numeric_cols:
+        if col == "aqi_value":
+            continue
+        values = pd.to_numeric(df[col], errors="coerce")
+        values = values.replace([np.inf, -np.inf], np.nan).dropna()
+        if len(values) >= 20 and values.nunique() > 1:
+            predictors.append(col)
+
     if not predictors:
-        st.error("No numerical predictor columns are available besides AQI.")
+        st.error("No usable numerical predictor columns are available besides AQI. Check the dataset for numeric columns with valid values.")
         st.stop()
+    excluded_numeric = [c for c in numeric_cols if c != "aqi_value" and c not in predictors]
+    if excluded_numeric:
+        st.caption("Ignored empty or unusable numeric columns: " + ", ".join(excluded_numeric))
 
     simple_predictor = st.selectbox("Predictor for Simple Linear Regression", predictors, index=0)
     multi_predictors = st.multiselect(
